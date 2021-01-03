@@ -296,7 +296,8 @@ void TestsRenderer::Load()
 		}
 
 	});
-	testSelector.SetSelected(0);
+	//testSelector.SetSelected(0);
+	testSelector.SetSelected(1);
 	GetGUI().AddWidget(&testSelector);
 
     RenderPath3D::Load();
