@@ -16,8 +16,7 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif // _WIN32
 
-#include <vulkan/vulkan.h>
-
+#include "Utility/volk.h"
 #include "Utility/vk_mem_alloc.h"
 
 #include <vector>
@@ -29,18 +28,12 @@
 
 namespace wiGraphics
 {
-	struct FrameResources;
-	struct DescriptorTableFrameAllocator;
-
 	class GraphicsDevice_Vulkan : public GraphicsDevice
 	{
-		friend struct DescriptorTableFrameAllocator;
 	private:
-
 		VkInstance instance = VK_NULL_HANDLE;
 	    VkDebugUtilsMessengerEXT debugUtilsMessenger{VK_NULL_HANDLE};
-		/// Deprecated
-	    VkDebugReportCallbackEXT debugReportCallback = VK_NULL_HANDLE;
+	    VkDebugReportCallbackEXT debugReportCallback = VK_NULL_HANDLE; // Deprecated
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
