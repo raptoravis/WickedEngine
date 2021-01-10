@@ -119,6 +119,7 @@ void TestsRenderer::Load()
 	testSelector.AddItem("Controller Test");
 	testSelector.AddItem("Inverse Kinematics");
 	testSelector.AddItem("65k Instances");
+	testSelector.AddItem("sponza");
 	testSelector.SetMaxVisibleItemCount(10);
 	testSelector.OnSelect([=](wiEventArgs args) {
 
@@ -290,6 +291,26 @@ void TestsRenderer::Load()
 		}
 		break;
 
+		case 19:
+		{
+			//wiRenderer::SetTemporalAAEnabled(true);
+			wiScene::LoadModel("../models/Sponza/sponza.wiscene");
+
+			//// Reset camera position:
+			//TransformComponent transform;
+			//transform.Translate(XMFLOAT3(0, 2.f, -4.5f));
+			//transform.RotateRollPitchYaw(XMFLOAT3(0, -90.f * 3.1415926 / 180.0, 0.0f));
+			//transform.UpdateTransform();
+			//wiScene::GetCamera().TransformCamera(transform);
+
+			CameraComponent& camera = wiScene::GetCamera();
+			camera.Eye = XMFLOAT3(6.0467f, 1.7097f, -8.5578f);
+			camera.At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
+			camera.UpdateCamera();
+
+			break;
+		}
+
 		default:
 			assert(0);
 			break;
@@ -298,18 +319,22 @@ void TestsRenderer::Load()
 	});
 
 
-	debugLightCulling.Create("Debug Light Culling: ");
-	debugLightCulling.SetSize(XMFLOAT2(40, 20));
-	debugLightCulling.SetPos(XMFLOAT2(150, 230));
+	{
+		debugLightCulling.Create("Debug Light Culling: ");
+		debugLightCulling.SetSize(XMFLOAT2(40, 20));
+		debugLightCulling.SetPos(XMFLOAT2(150, 230));
 
-	bool debugLightCullingCheck = false;
-	debugLightCulling.SetCheck(debugLightCullingCheck);
-	wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
+		bool debugLightCullingCheck = false;
+		debugLightCulling.SetCheck(debugLightCullingCheck);
+		wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
 
-	GetGUI().AddWidget(&debugLightCulling);
+		GetGUI().AddWidget(&debugLightCulling);
+
+		//testSelector.SetSelected(1);
+		testSelector.SetSelected(19);
+	}
 
 	//testSelector.SetSelected(0);
-	testSelector.SetSelected(1);
 	GetGUI().AddWidget(&testSelector);
 
     RenderPath3D::Load();
