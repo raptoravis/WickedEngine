@@ -329,10 +329,21 @@ void TestsRenderer::Load()
 		wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
 
 		GetGUI().AddWidget(&debugLightCulling);
-
-		//testSelector.SetSelected(1);
-		testSelector.SetSelected(19);
 	}
+
+	{
+		postprocessBloomEnabled.Create("Bloom: ");
+		postprocessBloomEnabled.SetSize(XMFLOAT2(40, 20));
+		postprocessBloomEnabled.SetPos(XMFLOAT2(150, 250));
+		bool ppBloomEnabled = RenderPath3D::getBloomEnabled();
+		postprocessBloomEnabled.SetCheck(ppBloomEnabled);
+		wiRenderer::SetDebugLightCulling(ppBloomEnabled);
+
+		GetGUI().AddWidget(&postprocessBloomEnabled);
+	}
+
+	//testSelector.SetSelected(1);
+	testSelector.SetSelected(19);
 
 	//testSelector.SetSelected(0);
 	GetGUI().AddWidget(&testSelector);
@@ -341,8 +352,13 @@ void TestsRenderer::Load()
 }
 void TestsRenderer::Update(float dt)
 {
-	auto debugLightCullingCheck = debugLightCulling.GetCheck();
-	wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
+	{
+		auto debugLightCullingCheck = debugLightCulling.GetCheck();
+		wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
+
+		auto ppBloomEnabled = postprocessBloomEnabled.GetCheck();
+		RenderPath3D::setBloomEnabled(ppBloomEnabled);
+	}
 
 	switch (testSelector.GetSelected())
 	{
