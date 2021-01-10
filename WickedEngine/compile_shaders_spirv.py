@@ -74,6 +74,9 @@ for item in root.iter():
             cmd += " -Vd " #DISABLE VALIDATION: There is currently a validation bug with raytracing RayTCurrent()!!!
             
             cmd += " -D SPIRV "
+            cmd += " -Zi "
+            #cmd += " -Zi -Qembed_debug -O0 "
+            #cmd += " fspv-debug=file "
 
             output_name = os.path.splitext(name)[0] + ".cso "
             
