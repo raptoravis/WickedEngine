@@ -9,6 +9,7 @@ class TestsRenderer : public RenderPath3D
 	wiCheckBox debugLightCulling;
 	wiCheckBox postprocessBloomEnabled;
 	wiECS::Entity ik_entity = wiECS::INVALID_ENTITY;
+	wiScene::TransformComponent camera_transform;
 public:
 	void Load() override;
 	void Update(float dt) override;
@@ -18,6 +19,9 @@ public:
 	void RunFontTest();
 	void RunSpriteTest();
 	void RunNetworkTest();
+
+	void resetCamera();
+	void updateCamera(float dt);
 };
 
 class Tests : public MainComponent

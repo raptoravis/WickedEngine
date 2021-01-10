@@ -5,6 +5,7 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <utility>
 
 using namespace wiECS;
 using namespace wiScene;
@@ -23,6 +24,7 @@ void Tests::Initialize()
 
 	ActivatePath(&renderer);
 }
+
 
 void TestsRenderer::ResizeLayout()
 {
@@ -303,10 +305,10 @@ void TestsRenderer::Load()
 			//transform.UpdateTransform();
 			//wiScene::GetCamera().TransformCamera(transform);
 
-			CameraComponent& camera = wiScene::GetCamera();
-			camera.Eye = XMFLOAT3(6.0467f, 1.7097f, -8.5578f);
-			camera.At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
-			camera.UpdateCamera();
+			//CameraComponent& camera = wiScene::GetCamera();
+			//camera.Eye = XMFLOAT3(6.0467f, 1.7097f, -8.5578f);
+			//camera.At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
+			//camera.UpdateCamera();
 
 			break;
 		}
@@ -342,14 +344,178 @@ void TestsRenderer::Load()
 		GetGUI().AddWidget(&postprocessBloomEnabled);
 	}
 
+	resetCamera();
+
 	//testSelector.SetSelected(1);
 	testSelector.SetSelected(19);
 
 	//testSelector.SetSelected(0);
 	GetGUI().AddWidget(&testSelector);
+	//camera.At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
+	//camera_transform.Translate(XMFLOAT3(6.0467f, 1.7097f, -8.5578f));
 
     RenderPath3D::Load();
 }
+
+	//camera.At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
+	//camera_transform.Translate(XMFLOAT3(6.0467f, 1.7097f, -8.5578f));
+static XMMATRIX calculateCameraMatrix(const XMFLOAT3& Eye, XMFLOAT3& At, const XMFLOAT3& Up = XMFLOAT3(0, 1, 0))
+{
+	XMVECTOR _Eye = XMLoadFloat3(&Eye);
+	XMVECTOR _At = XMLoadFloat3(&At);
+	XMVECTOR _Up = XMLoadFloat3(&Up);
+
+
+	XMMATRIX _V = XMMatrixLookToLH(_Eye, _At, _Up);
+
+	//XMFLOAT4X4 View;
+	//XMStoreFloat4x4(&View, _V);
+
+	XMVECTOR dest;
+	XMMATRIX _W = XMMatrixInverse(&dest, _V);
+
+	return _W;
+}
+
+void outputCameraInfo()
+{
+	auto camera = wiScene::GetCamera();
+
+	//camera.UpdateCamera();
+	std::stringstream ss("");
+	ss << "Camera Eye:" << camera.Eye.x << " "<< camera.Eye.y << " " << camera.Eye.z;
+	ss << " At:" << camera.At.x << " " << camera.At.y << " " << camera.At.z;// << std::endl;
+
+	wiBackLog::post(ss.str().c_str());
+}
+
+void TestsRenderer::resetCamera()
+{
+	auto camera = wiScene::GetCamera();
+
+	camera_transform.ClearTransform();
+
+	XMFLOAT3 Eye = XMFLOAT3(6.0467f, 1.7097f, -8.5578f);
+	XMFLOAT3 At = XMFLOAT3(0.93997f, 0.3f, 0.1621f);
+
+	XMMATRIX View = calculateCameraMatrix(Eye, At);
+	camera_transform.MatrixTransform(View);
+	camera_transform.UpdateTransform();
+
+	camera.TransformCamera(camera_transform);
+}
+
+void TestsRenderer::updateCamera(float dt)
+{
+	CameraComponent& camera = wiScene::GetCamera();
+
+	static XMFLOAT4 originalMouse = XMFLOAT4(0, 0, 0, 0);
+	static bool camControlStart = true;
+
+	float xDif = 0, yDif = 0;
+	if (wiInput::Down(wiInput::MOUSE_BUTTON_MIDDLE))
+	{
+		camControlStart = false;
+#if 0
+		// Mouse delta from previous frame:
+		xDif = currentMouse.x - originalMouse.x;
+		yDif = currentMouse.y - originalMouse.y;
+#else
+		// Mouse delta from hardware read:
+		xDif = wiInput::GetMouseState().delta_position.x;
+		yDif = wiInput::GetMouseState().delta_position.y;
+#endif
+		xDif = 0.1f * xDif * (1.0f / 60.0f);
+		yDif = 0.1f * yDif * (1.0f / 60.0f);
+		wiInput::SetPointer(originalMouse);
+		wiInput::HidePointer(true);
+	}
+	else
+	{
+		camControlStart = true;
+		wiInput::HidePointer(false);
+	}
+
+	const float buttonrotSpeed = 2.0f / 60.0f;
+	if (wiInput::Down(wiInput::KEYBOARD_BUTTON_LEFT))
+	{
+		xDif -= buttonrotSpeed;
+	}
+	if (wiInput::Down(wiInput::KEYBOARD_BUTTON_RIGHT))
+	{
+		xDif += buttonrotSpeed;
+	}
+	if (wiInput::Down(wiInput::KEYBOARD_BUTTON_UP))
+	{
+		yDif -= buttonrotSpeed;
+	}
+	if (wiInput::Down(wiInput::KEYBOARD_BUTTON_DOWN))
+	{
+		yDif += buttonrotSpeed;
+	}
+
+
+	const XMFLOAT4 leftStick = wiInput::GetAnalog(wiInput::GAMEPAD_ANALOG_THUMBSTICK_L, 0);
+	const XMFLOAT4 rightStick = wiInput::GetAnalog(wiInput::GAMEPAD_ANALOG_THUMBSTICK_R, 0);
+	const XMFLOAT4 rightTrigger = wiInput::GetAnalog(wiInput::GAMEPAD_ANALOG_TRIGGER_R, 0);
+
+	const float jostickrotspeed = 0.05f;
+	xDif += rightStick.x * jostickrotspeed;
+	yDif += rightStick.y * jostickrotspeed;
+
+	const float rotationspeedSlider = 1.0f;
+
+	xDif *= rotationspeedSlider;
+	yDif *= rotationspeedSlider;
+
+
+	// FPS Camera
+	const float clampedDT = (dt > 0.1f) ? 0.1f : dt; // if dt > 100 millisec, don't allow the camera to jump too far...
+
+	const float speed = ((wiInput::Down(wiInput::KEYBOARD_BUTTON_LSHIFT) ? 10.0f : 1.0f) + rightTrigger.x * 10.0f) * 10.0f * clampedDT;
+	static XMVECTOR move = XMVectorSet(0, 0, 0, 0);
+	XMVECTOR moveNew = XMVectorSet(leftStick.x, 0, leftStick.y, 0);
+
+	if (!wiInput::Down(wiInput::KEYBOARD_BUTTON_LCONTROL))
+	{
+		// Only move camera if control not pressed
+		if (wiInput::Down((wiInput::BUTTON)'A') || wiInput::Down(wiInput::GAMEPAD_BUTTON_LEFT)) { moveNew += XMVectorSet(-1, 0, 0, 0); }
+		if (wiInput::Down((wiInput::BUTTON)'D') || wiInput::Down(wiInput::GAMEPAD_BUTTON_RIGHT)) { moveNew += XMVectorSet(1, 0, 0, 0); }
+		if (wiInput::Down((wiInput::BUTTON)'W') || wiInput::Down(wiInput::GAMEPAD_BUTTON_UP)) { moveNew += XMVectorSet(0, 0, 1, 0); }
+		if (wiInput::Down((wiInput::BUTTON)'S') || wiInput::Down(wiInput::GAMEPAD_BUTTON_DOWN)) { moveNew += XMVectorSet(0, 0, -1, 0); }
+		if (wiInput::Down((wiInput::BUTTON)'E') || wiInput::Down(wiInput::GAMEPAD_BUTTON_2)) { moveNew += XMVectorSet(0, 1, 0, 0); }
+		if (wiInput::Down((wiInput::BUTTON)'Q') || wiInput::Down(wiInput::GAMEPAD_BUTTON_1)) { moveNew += XMVectorSet(0, -1, 0, 0); }
+		moveNew += XMVector3Normalize(moveNew);
+	}
+	moveNew *= speed;
+
+	move = XMVectorLerp(move, moveNew, 0.18f * clampedDT / 0.0166f); // smooth the movement a bit
+	float moveLength = XMVectorGetX(XMVector3Length(move));
+
+	if (moveLength < 0.0001f)
+	{
+		move = XMVectorSet(0, 0, 0, 0);
+	}
+
+	if (abs(xDif) + abs(yDif) > 0 || moveLength > 0.0001f)
+	{
+		XMFLOAT4 rotation_local = XMFLOAT4(0, 0, 0, 1);	// this is a quaternion
+		XMMATRIX camRot = XMMatrixRotationQuaternion(XMLoadFloat4(&camera_transform.rotation_local));
+		XMVECTOR move_rot = XMVector3TransformNormal(move, camRot);
+		XMFLOAT3 _move;
+		XMStoreFloat3(&_move, move_rot);
+		camera_transform.Translate(_move);
+		camera_transform.RotateRollPitchYaw(XMFLOAT3(yDif, xDif, 0));
+		camera.SetDirty();
+	}
+
+	camera_transform.UpdateTransform();
+
+	camera.TransformCamera(camera_transform);
+	camera.UpdateCamera();
+}
+
+
 void TestsRenderer::Update(float dt)
 {
 	{
@@ -358,6 +524,15 @@ void TestsRenderer::Update(float dt)
 
 		auto ppBloomEnabled = postprocessBloomEnabled.GetCheck();
 		RenderPath3D::setBloomEnabled(ppBloomEnabled);
+	}
+	
+	updateCamera(dt);
+
+	if (wiInput::Press(wiInput::KEYBOARD_BUTTON_SPACE))
+	{
+		outputCameraInfo();
+
+		resetCamera();
 	}
 
 	switch (testSelector.GetSelected())
