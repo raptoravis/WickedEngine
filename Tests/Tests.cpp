@@ -296,6 +296,18 @@ void TestsRenderer::Load()
 		}
 
 	});
+
+
+	debugLightCulling.Create("Debug Light Culling: ");
+	debugLightCulling.SetSize(XMFLOAT2(40, 20));
+	debugLightCulling.SetPos(XMFLOAT2(150, 230));
+
+	bool debugLightCullingCheck = false;
+	debugLightCulling.SetCheck(debugLightCullingCheck);
+	wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
+
+	GetGUI().AddWidget(&debugLightCulling);
+
 	//testSelector.SetSelected(0);
 	testSelector.SetSelected(1);
 	GetGUI().AddWidget(&testSelector);
@@ -304,6 +316,9 @@ void TestsRenderer::Load()
 }
 void TestsRenderer::Update(float dt)
 {
+	auto debugLightCullingCheck = debugLightCulling.GetCheck();
+	wiRenderer::SetDebugLightCulling(debugLightCullingCheck);
+
 	switch (testSelector.GetSelected())
 	{
     case 1:
