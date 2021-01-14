@@ -339,9 +339,20 @@ void TestsRenderer::Load()
 		postprocessBloomEnabled.SetPos(XMFLOAT2(150, 250));
 		bool ppBloomEnabled = RenderPath3D::getBloomEnabled();
 		postprocessBloomEnabled.SetCheck(ppBloomEnabled);
-		wiRenderer::SetDebugLightCulling(ppBloomEnabled);
+		RenderPath3D::setBloomEnabled(ppBloomEnabled);
 
 		GetGUI().AddWidget(&postprocessBloomEnabled);
+	}
+
+	{
+		toneMappingDitherEnabled.Create("Dither: ");
+		toneMappingDitherEnabled.SetSize(XMFLOAT2(40, 20));
+		toneMappingDitherEnabled.SetPos(XMFLOAT2(150, 270));
+		bool ppDitherEnabled = RenderPath3D::getBloomEnabled();
+		toneMappingDitherEnabled.SetCheck(ppDitherEnabled);
+		RenderPath3D::setDitherEnabled(ppDitherEnabled);
+
+		GetGUI().AddWidget(&toneMappingDitherEnabled);
 	}
 
 	resetCamera();
@@ -524,6 +535,9 @@ void TestsRenderer::Update(float dt)
 
 		auto ppBloomEnabled = postprocessBloomEnabled.GetCheck();
 		RenderPath3D::setBloomEnabled(ppBloomEnabled);
+
+		auto ppDitherEnabled = toneMappingDitherEnabled.GetCheck();
+		RenderPath3D::setDitherEnabled(ppDitherEnabled);
 	}
 	
 	updateCamera(dt);
