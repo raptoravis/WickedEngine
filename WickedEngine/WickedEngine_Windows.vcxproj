@@ -149,7 +149,7 @@
     <FxCompile>
       <ObjectFileOutput>shaders/%(Filename).cso</ObjectFileOutput>
       <DisableOptimizations>false</DisableOptimizations>
-      <EnableDebuggingInformation>false</EnableDebuggingInformation>
+      <EnableDebuggingInformation>true</EnableDebuggingInformation>
       <ShaderModel>5.0</ShaderModel>
     </FxCompile>
     <ProjectReference>
