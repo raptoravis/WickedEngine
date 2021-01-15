@@ -9,6 +9,7 @@ class TestsRenderer : public RenderPath3D
 	wiCheckBox debugLightCulling;
 	wiCheckBox postprocessBloomEnabled;
 	wiCheckBox toneMappingDitherEnabled;
+	wiCheckBox postprocessSSREnabled;
 	wiECS::Entity ik_entity = wiECS::INVALID_ENTITY;
 	wiScene::TransformComponent camera_transform;
 public:

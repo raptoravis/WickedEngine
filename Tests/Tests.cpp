@@ -348,11 +348,22 @@ void TestsRenderer::Load()
 		toneMappingDitherEnabled.Create("Dither: ");
 		toneMappingDitherEnabled.SetSize(XMFLOAT2(40, 20));
 		toneMappingDitherEnabled.SetPos(XMFLOAT2(150, 270));
-		bool ppDitherEnabled = RenderPath3D::getBloomEnabled();
+		bool ppDitherEnabled = RenderPath3D::getDitherEnabled();
 		toneMappingDitherEnabled.SetCheck(ppDitherEnabled);
 		RenderPath3D::setDitherEnabled(ppDitherEnabled);
 
 		GetGUI().AddWidget(&toneMappingDitherEnabled);
+	}
+
+	{
+		postprocessSSREnabled.Create("SSR: ");
+		postprocessSSREnabled.SetSize(XMFLOAT2(40, 20));
+		postprocessSSREnabled.SetPos(XMFLOAT2(150, 290));
+		bool ppSSREnabled = RenderPath3D::getSSREnabled();
+		postprocessSSREnabled.SetCheck(ppSSREnabled);
+		RenderPath3D::setSSREnabled(ppSSREnabled);
+
+		GetGUI().AddWidget(&postprocessSSREnabled);
 	}
 
 	resetCamera();
@@ -538,6 +549,9 @@ void TestsRenderer::Update(float dt)
 
 		auto ppDitherEnabled = toneMappingDitherEnabled.GetCheck();
 		RenderPath3D::setDitherEnabled(ppDitherEnabled);
+
+		auto ppSSREnabled = postprocessSSREnabled.GetCheck();
+		RenderPath3D::setSSREnabled(ppSSREnabled);
 	}
 	
 	updateCamera(dt);
