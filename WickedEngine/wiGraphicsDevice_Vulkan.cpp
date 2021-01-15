@@ -37,21 +37,6 @@
 namespace wiGraphics
 {
 
-	PFN_vkCreateRayTracingPipelinesKHR GraphicsDevice_Vulkan::createRayTracingPipelinesKHR = nullptr;
-	PFN_vkCreateAccelerationStructureKHR GraphicsDevice_Vulkan::createAccelerationStructureKHR = nullptr;
-	PFN_vkDestroyAccelerationStructureKHR GraphicsDevice_Vulkan::destroyAccelerationStructureKHR = nullptr;
-	PFN_vkGetAccelerationStructureBuildSizesKHR GraphicsDevice_Vulkan::getAccelerationStructureBuildSizesKHR = nullptr;
-	PFN_vkGetAccelerationStructureDeviceAddressKHR GraphicsDevice_Vulkan::getAccelerationStructureDeviceAddressKHR = nullptr;
-	PFN_vkGetRayTracingShaderGroupHandlesKHR GraphicsDevice_Vulkan::getRayTracingShaderGroupHandlesKHR = nullptr;
-	PFN_vkCmdBuildAccelerationStructuresKHR GraphicsDevice_Vulkan::cmdBuildAccelerationStructuresKHR = nullptr;
-	PFN_vkBuildAccelerationStructuresKHR GraphicsDevice_Vulkan::buildAccelerationStructuresKHR = nullptr;
-	PFN_vkCmdTraceRaysKHR GraphicsDevice_Vulkan::cmdTraceRaysKHR = nullptr;
-
-	PFN_vkCmdDrawMeshTasksNV GraphicsDevice_Vulkan::cmdDrawMeshTasksNV = nullptr;
-	PFN_vkCmdDrawMeshTasksIndirectNV GraphicsDevice_Vulkan::cmdDrawMeshTasksIndirectNV = nullptr;
-
-	PFN_vkCmdSetFragmentShadingRateKHR GraphicsDevice_Vulkan::cmdSetFragmentShadingRateKHR = nullptr;
-
 namespace Vulkan_Internal
 {
 	// Converters:
@@ -586,23 +571,15 @@ namespace Vulkan_Internal
 		return flags;
 	}
 	
-	// Extension functions:
-	PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT = nullptr;
-	PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelEXT = nullptr;
-	PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelEXT = nullptr;
-	PFN_vkCmdInsertDebugUtilsLabelEXT cmdInsertDebugUtilsLabelEXT = nullptr;
-
-	bool checkDeviceExtensionSupport(const char* checkExtension, 
-		const std::vector<VkExtensionProperties>& available_deviceExtensions) {
-
-		for (const auto& x : available_deviceExtensions)
+	bool checkExtensionSupport(const char* checkExtension, const std::vector<VkExtensionProperties>& available_extensions)
+	{
+		for (const auto& x : available_extensions)
 		{
 			if (strcmp(x.extensionName, checkExtension) == 0)
 			{
 				return true;
 			}
 		}
-
 		return false;
 	}
 
@@ -610,7 +587,8 @@ namespace Vulkan_Internal
 	const std::vector<const char*> validationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
-	bool checkValidationLayerSupport() {
+	bool checkValidationLayerSupport()
+	{
 		uint32_t layerCount;
 		VkResult res = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 		assert(res == VK_SUCCESS);
@@ -662,62 +640,6 @@ namespace Vulkan_Internal
 
 		return VK_FALSE;
 	}
-
-	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-		VkDebugReportFlagsEXT flags,
-		VkDebugReportObjectTypeEXT objType,
-		uint64_t obj,
-		size_t location,
-		int32_t code,
-		const char* layerPrefix,
-		const char* msg,
-		void* userData) {
-
-		std::stringstream ss("");
-		ss << "[VULKAN validation layer]: " << msg << std::endl;
-
-		std::clog << ss.str();
-#ifdef _WIN32
-		OutputDebugStringA(ss.str().c_str());
-#endif
-
-		return VK_FALSE;
-	}
-	VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pMessenger)
-	{
-		auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-		if (func != nullptr)
-		{
-		return func(instance, pCreateInfo, pAllocator, pMessenger);
-		}
-
-		return VK_ERROR_EXTENSION_NOT_PRESENT;
-	}
-	void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* pAllocator)
-	{
-		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-		if (func != nullptr)
-		{
-			func(instance, messenger, pAllocator);
-		}
-	}
-
-	VkResult CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) {
-		auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
-		if (func != nullptr) {
-			return func(instance, pCreateInfo, pAllocator, pCallback);
-		}
-		else {
-			return VK_ERROR_EXTENSION_NOT_PRESENT;
-		}
-	}
-	void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) {
-		auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
-		if (func != nullptr) {
-			func(instance, callback, pAllocator);
-		}
-	}
-
 
 	// Memory tools:
 
@@ -1287,6 +1209,12 @@ using namespace Vulkan_Internal;
 		int i = 0;
 		for (auto& x : layoutBindings)
 		{
+			if (x.pImmutableSamplers != nullptr)
+			{
+				i++;
+				continue;
+			}
+
 			descriptorWrites.emplace_back();
 			auto& write = descriptorWrites.back();
 			write = {};
@@ -2177,27 +2105,14 @@ using namespace Vulkan_Internal;
 
 		std::vector<const char*> extensionNames;
 
-		// Check if VK_EXT_debug_utils is supported, which supersedes VK_EXT_Debug_Report
-		bool debugUtils = false;
-		if (debuglayer)
+		if (checkExtensionSupport(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, availableInstanceExtensions))
 		{
-			for (auto& available_extension : availableInstanceExtensions)
-			{
-				if (strcmp(available_extension.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0)
-				{
-					debugUtils = true;
-					extensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-					break;
-				}
-			}
-
-			if (!debugUtils)
-			{
-				extensionNames.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-			}
+			// This is needed for not only debug layer, but also debug markers, object naming, etc:
+			extensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
 		
 		extensionNames.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+
 #ifdef _WIN32
 		extensionNames.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #elif SDL2
@@ -2234,30 +2149,18 @@ using namespace Vulkan_Internal;
 			res = vkCreateInstance(&createInfo, nullptr, &instance);
 			assert(res == VK_SUCCESS);
 
-			volkLoadInstance(instance);
+			volkLoadInstanceOnly(instance);
 		}
 
 		// Register validation layer callback:
 		if (debuglayer)
 		{
-			if(debugUtils)
-			{
-				VkDebugUtilsMessengerCreateInfoEXT createInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-				createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-				createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-				createInfo.pfnUserCallback = debugUtilsMessengerCallback;
-				res = CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugUtilsMessenger);
-				assert(res == VK_SUCCESS);
-			}
-			else
-			{
-				VkDebugReportCallbackCreateInfoEXT createInfo = {};
-				createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-				createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-				createInfo.pfnCallback = debugCallback;
-				res = CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &debugReportCallback);
-				assert(res == VK_SUCCESS);
-			}
+			VkDebugUtilsMessengerCreateInfoEXT createInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+			createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+			createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+			createInfo.pfnUserCallback = debugUtilsMessengerCallback;
+			res = vkCreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugUtilsMessenger);
+			assert(res == VK_SUCCESS);
 		}
 
 
@@ -2333,7 +2236,7 @@ using namespace Vulkan_Internal;
 
 				for (auto& x : required_deviceExtensions)
 				{
-					if (!checkDeviceExtensionSupport(x, available))
+					if (!checkExtensionSupport(x, available))
 					{
 						suitable = false; // device doesn't have a required extension
 					}
@@ -2440,7 +2343,7 @@ using namespace Vulkan_Internal;
 			res = vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, available_deviceExtensions.data());
 			assert(res == VK_SUCCESS);
 
-			if (checkDeviceExtensionSupport(VK_KHR_SPIRV_1_4_EXTENSION_NAME, available_deviceExtensions))
+			if (checkExtensionSupport(VK_KHR_SPIRV_1_4_EXTENSION_NAME, available_deviceExtensions))
 			{
 				enabled_deviceExtensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
 			}
@@ -2454,14 +2357,14 @@ using namespace Vulkan_Internal;
 
 			void** features_chain = &features_1_2.pNext;
 
-			if (checkDeviceExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, available_deviceExtensions))
+			if (checkExtensionSupport(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, available_deviceExtensions))
 			{
 				enabled_deviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
 				acceleration_structure_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
 				*features_chain = &acceleration_structure_features;
 				features_chain = &acceleration_structure_features.pNext;
 
-				if (checkDeviceExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, available_deviceExtensions))
+				if (checkExtensionSupport(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, available_deviceExtensions))
 				{
 					SHADER_IDENTIFIER_SIZE = raytracing_properties.shaderGroupHandleSize;
 					enabled_deviceExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
@@ -2471,7 +2374,7 @@ using namespace Vulkan_Internal;
 					features_chain = &raytracing_features.pNext;
 				}
 
-				if (checkDeviceExtensionSupport(VK_KHR_RAY_QUERY_EXTENSION_NAME, available_deviceExtensions))
+				if (checkExtensionSupport(VK_KHR_RAY_QUERY_EXTENSION_NAME, available_deviceExtensions))
 				{
 					enabled_deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
 					enabled_deviceExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
@@ -2481,7 +2384,7 @@ using namespace Vulkan_Internal;
 				}
 			}
 
-			if (checkDeviceExtensionSupport(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, available_deviceExtensions))
+			if (checkExtensionSupport(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, available_deviceExtensions))
 			{
 				VARIABLE_RATE_SHADING_TILE_SIZE = std::min(fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.width, fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.height);
 				enabled_deviceExtensions.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
@@ -2490,7 +2393,7 @@ using namespace Vulkan_Internal;
 				features_chain = &fragment_shading_rate_features.pNext;
 			}
 
-			if (checkDeviceExtensionSupport(VK_NV_MESH_SHADER_EXTENSION_NAME, available_deviceExtensions))
+			if (checkExtensionSupport(VK_NV_MESH_SHADER_EXTENSION_NAME, available_deviceExtensions))
 			{
 				enabled_deviceExtensions.push_back(VK_NV_MESH_SHADER_EXTENSION_NAME);
 				mesh_shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV;
@@ -2527,6 +2430,7 @@ using namespace Vulkan_Internal;
 			{
 				assert(acceleration_structure_features.accelerationStructure == VK_TRUE);
 				assert(features_1_2.bufferDeviceAddress == VK_TRUE);
+				// Shader compiler has bug with vk inline raytracing now:
 				//capabilities |= GRAPHICSDEVICE_CAPABILITY_RAYTRACING_INLINE;
 			}
 			if (mesh_shader_features.meshShader == VK_TRUE && mesh_shader_features.taskShader == VK_TRUE)
@@ -2605,36 +2509,6 @@ using namespace Vulkan_Internal;
 		}
 		res = vmaCreateAllocator(&allocatorInfo, &allocationhandler->allocator);
 		assert(res == VK_SUCCESS);
-
-		// Extension functions:
-		setDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
-		cmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(device, "vkCmdBeginDebugUtilsLabelEXT");
-		cmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(device, "vkCmdEndDebugUtilsLabelEXT");
-		cmdInsertDebugUtilsLabelEXT = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetDeviceProcAddr(device, "vkCmdInsertDebugUtilsLabelEXT");
-
-		if (CheckCapability(GRAPHICSDEVICE_CAPABILITY_RAYTRACING))
-		{
-			createRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR");
-			createAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR");
-			destroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkDestroyAccelerationStructureKHR");
-			getAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureBuildSizesKHR");
-			getAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureDeviceAddressKHR");
-			getRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR");
-			cmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(device, "vkCmdBuildAccelerationStructuresKHR");
-			buildAccelerationStructuresKHR = (PFN_vkBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(device, "vkBuildAccelerationStructuresKHR");
-			cmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR");
-		}
-
-		if (CheckCapability(GRAPHICSDEVICE_CAPABILITY_MESH_SHADER))
-		{
-			cmdDrawMeshTasksNV = (PFN_vkCmdDrawMeshTasksNV)vkGetDeviceProcAddr(device, "vkCmdDrawMeshTasksNV");
-			cmdDrawMeshTasksIndirectNV = (PFN_vkCmdDrawMeshTasksIndirectNV)vkGetDeviceProcAddr(device, "vkCmdDrawMeshTasksIndirectNV");
-		}
-
-		if (CheckCapability(GRAPHICSDEVICE_CAPABILITY_VARIABLE_RATE_SHADING))
-		{
-			cmdSetFragmentShadingRateKHR = (PFN_vkCmdSetFragmentShadingRateKHR)vkGetDeviceProcAddr(device, "vkCmdSetFragmentShadingRateKHR");
-		}
 
 		CreateBackBufferResources();
 
@@ -2958,12 +2832,7 @@ using namespace Vulkan_Internal;
 
 		if (debugUtilsMessenger != VK_NULL_HANDLE)
 		{
-			DestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
-		}
-
-		if (debugReportCallback != VK_NULL_HANDLE)
-		{
-			DestroyDebugReportCallbackEXT(instance, debugReportCallback, nullptr);
+			vkDestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
 		}
 
 		vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -3057,16 +2926,19 @@ using namespace Vulkan_Internal;
 		assert(res == VK_SUCCESS);
 		swapChainImageFormat = surfaceFormat.format;
 
-		VkDebugUtilsObjectNameInfoEXT info = {};
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-		info.pObjectName = "SWAPCHAIN";
-		info.objectType = VK_OBJECT_TYPE_IMAGE;
-		for (auto& x : swapChainImages)
+		if (vkSetDebugUtilsObjectNameEXT != nullptr)
 		{
-			info.objectHandle = (uint64_t)x;
+			VkDebugUtilsObjectNameInfoEXT info = {};
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			info.pObjectName = "SWAPCHAIN";
+			info.objectType = VK_OBJECT_TYPE_IMAGE;
+			for (auto& x : swapChainImages)
+			{
+				info.objectHandle = (uint64_t)x;
 
-			res = setDebugUtilsObjectNameEXT(device, &info);
-			assert(res == VK_SUCCESS);
+				res = vkSetDebugUtilsObjectNameEXT(device, &info);
+				assert(res == VK_SUCCESS);
+			}
 		}
 
 		// Create default render pass:
@@ -3802,6 +3674,8 @@ using namespace Vulkan_Internal;
 			std::vector<VkDescriptorSetLayoutBinding>& layoutBindings = internal_state->layoutBindings;
 			std::vector<VkImageViewType>& imageViewTypes = internal_state->imageViewTypes;
 
+			std::vector<VkSampler> staticsamplers;
+
 			for (auto& x : bindings)
 			{
 				imageViewTypes.push_back(VK_IMAGE_VIEW_TYPE_MAX_ENUM);
@@ -3809,6 +3683,36 @@ using namespace Vulkan_Internal;
 				layoutBindings.back().stageFlags = internal_state->stageInfo.stage;
 				layoutBindings.back().binding = x->binding;
 				layoutBindings.back().descriptorCount = 1;
+
+				if (x->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER)
+				{
+					bool staticsampler = false;
+					for (auto& sam : pShader->auto_samplers)
+					{
+						if (x->binding == sam.slot + VULKAN_BINDING_SHIFT_S)
+						{
+							layoutBindings.back().pImmutableSamplers = &to_internal(&sam.sampler)->resource;
+							staticsampler = true;
+							break; // static sampler will be used instead
+						}
+					}
+					if (!staticsampler)
+					{
+						for (auto& sam : common_samplers)
+						{
+							if (x->binding == sam.slot + VULKAN_BINDING_SHIFT_S)
+							{
+								layoutBindings.back().pImmutableSamplers = &to_internal(&sam.sampler)->resource;
+								staticsampler = true;
+								break; // static sampler will be used instead
+							}
+						}
+					}
+					if (staticsampler)
+					{
+						continue;
+					}
+				}
 
 				switch (x->descriptor_type)
 				{
@@ -4661,7 +4565,7 @@ using namespace Vulkan_Internal;
 		internal_state->sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
 		// Compute memory requirements:
-		getAccelerationStructureBuildSizesKHR(
+		vkGetAccelerationStructureBuildSizesKHR(
 			device,
 			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
 			&internal_state->buildInfo,
@@ -4700,7 +4604,7 @@ using namespace Vulkan_Internal;
 		internal_state->createInfo.buffer = internal_state->buffer;
 		internal_state->createInfo.size = internal_state->sizeInfo.accelerationStructureSize;
 
-		res = createAccelerationStructureKHR(
+		res = vkCreateAccelerationStructureKHR(
 			device,
 			&internal_state->createInfo,
 			nullptr,
@@ -4712,7 +4616,7 @@ using namespace Vulkan_Internal;
 		VkAccelerationStructureDeviceAddressInfoKHR addrinfo = {};
 		addrinfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
 		addrinfo.accelerationStructure = internal_state->resource;
-		internal_state->as_address = getAccelerationStructureDeviceAddressKHR(device, &addrinfo);
+		internal_state->as_address = vkGetAccelerationStructureDeviceAddressKHR(device, &addrinfo);
 
 		// Get scratch address:
 		VkBufferDeviceAddressInfo addressinfo = {};
@@ -4826,7 +4730,7 @@ using namespace Vulkan_Internal;
 		info.basePipelineHandle = VK_NULL_HANDLE;
 		info.basePipelineIndex = 0;
 
-		VkResult res = createRayTracingPipelinesKHR(
+		VkResult res = vkCreateRayTracingPipelinesKHR(
 			device,
 			VK_NULL_HANDLE,
 			VK_NULL_HANDLE,
@@ -5408,7 +5312,7 @@ using namespace Vulkan_Internal;
 	}
 	void GraphicsDevice_Vulkan::WriteShaderIdentifier(const RaytracingPipelineState* rtpso, uint32_t group_index, void* dest)
 	{
-		VkResult res = getRayTracingShaderGroupHandlesKHR(device, to_internal(rtpso)->pipeline, group_index, 1, SHADER_IDENTIFIER_SIZE, dest);
+		VkResult res = vkGetRayTracingShaderGroupHandlesKHR(device, to_internal(rtpso)->pipeline, group_index, 1, SHADER_IDENTIFIER_SIZE, dest);
 		assert(res == VK_SUCCESS);
 	}
 	void GraphicsDevice_Vulkan::WriteDescriptor(const DescriptorTable* table, uint32_t rangeIndex, uint32_t arrayIndex, const GPUResource* resource, int subresource, uint64_t offset)
@@ -5736,34 +5640,42 @@ using namespace Vulkan_Internal;
 		return res == VK_SUCCESS;
 	}
 
+	void GraphicsDevice_Vulkan::SetCommonSampler(const StaticSampler* sam)
+	{
+		common_samplers.push_back(*sam);
+	}
+
 	void GraphicsDevice_Vulkan::SetName(GPUResource* pResource, const char* name)
 	{
-		VkDebugUtilsObjectNameInfoEXT info = {};
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-		info.pObjectName = name;
-		if (pResource->IsTexture())
+		if (vkSetDebugUtilsObjectNameEXT != nullptr)
 		{
-			info.objectType = VK_OBJECT_TYPE_IMAGE;
-			info.objectHandle = (uint64_t)to_internal((const Texture*)pResource)->resource;
-		}
-		else if (pResource->IsBuffer())
-		{
-			info.objectType = VK_OBJECT_TYPE_BUFFER;
-			info.objectHandle = (uint64_t)to_internal((const GPUBuffer*)pResource)->resource;
-		}
-		else if (pResource->IsAccelerationStructure())
-		{
-			info.objectType = VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
-			info.objectHandle = (uint64_t)to_internal((const RaytracingAccelerationStructure*)pResource)->resource;
-		}
+			VkDebugUtilsObjectNameInfoEXT info = {};
+			info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+			info.pObjectName = name;
+			if (pResource->IsTexture())
+			{
+				info.objectType = VK_OBJECT_TYPE_IMAGE;
+				info.objectHandle = (uint64_t)to_internal((const Texture*)pResource)->resource;
+			}
+			else if (pResource->IsBuffer())
+			{
+				info.objectType = VK_OBJECT_TYPE_BUFFER;
+				info.objectHandle = (uint64_t)to_internal((const GPUBuffer*)pResource)->resource;
+			}
+			else if (pResource->IsAccelerationStructure())
+			{
+				info.objectType = VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
+				info.objectHandle = (uint64_t)to_internal((const RaytracingAccelerationStructure*)pResource)->resource;
+			}
 
-		if (info.objectHandle == VK_NULL_HANDLE)
-		{
-			return;
-		}
+			if (info.objectHandle == VK_NULL_HANDLE)
+			{
+				return;
+			}
 
-		VkResult res = setDebugUtilsObjectNameEXT(device, &info);
-		assert(res == VK_SUCCESS);
+			VkResult res = vkSetDebugUtilsObjectNameEXT(device, &info);
+			assert(res == VK_SUCCESS);
+		}
 	}
 
 	void GraphicsDevice_Vulkan::PresentBegin(CommandList cmd)
@@ -6298,7 +6210,7 @@ using namespace Vulkan_Internal;
 				}
 			}
 
-			cmdSetFragmentShadingRateKHR(
+			vkCmdSetFragmentShadingRateKHR(
 				GetDirectCommandList(cmd),
 				&fragmentSize,
 				combiner
@@ -6406,13 +6318,13 @@ using namespace Vulkan_Internal;
 	void GraphicsDevice_Vulkan::DispatchMesh(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ, CommandList cmd)
 	{
 		predraw(cmd);
-		cmdDrawMeshTasksNV(GetDirectCommandList(cmd), threadGroupCountX * threadGroupCountY * threadGroupCountZ, 0);
+		vkCmdDrawMeshTasksNV(GetDirectCommandList(cmd), threadGroupCountX * threadGroupCountY * threadGroupCountZ, 0);
 	}
 	void GraphicsDevice_Vulkan::DispatchMeshIndirect(const GPUBuffer* args, uint32_t args_offset, CommandList cmd)
 	{
 		predraw(cmd);
 		auto internal_state = to_internal(args);
-		cmdDrawMeshTasksIndirectNV(GetDirectCommandList(cmd), internal_state->resource, (VkDeviceSize)args_offset,1,sizeof(IndirectDispatchArgs));
+		vkCmdDrawMeshTasksIndirectNV(GetDirectCommandList(cmd), internal_state->resource, (VkDeviceSize)args_offset,1,sizeof(IndirectDispatchArgs));
 	}
 	void GraphicsDevice_Vulkan::CopyResource(const GPUResource* pDst, const GPUResource* pSrc, CommandList cmd)
 	{
@@ -6877,7 +6789,7 @@ using namespace Vulkan_Internal;
 
 		VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = ranges.data();
 
-		cmdBuildAccelerationStructuresKHR(
+		vkCmdBuildAccelerationStructuresKHR(
 			GetDirectCommandList(cmd),
 			1,
 			&info,
@@ -6921,7 +6833,7 @@ using namespace Vulkan_Internal;
 		callable.size = desc->callable.size;
 		callable.stride = desc->callable.stride;
 
-		cmdTraceRaysKHR(
+		vkCmdTraceRaysKHR(
 			GetDirectCommandList(cmd),
 			&raygen,
 			&miss,
@@ -7077,7 +6989,7 @@ using namespace Vulkan_Internal;
 
 	void GraphicsDevice_Vulkan::EventBegin(const char* name, CommandList cmd)
 	{
-		if (cmdBeginDebugUtilsLabelEXT != nullptr)
+		if (vkCmdBeginDebugUtilsLabelEXT != nullptr)
 		{
 			VkDebugUtilsLabelEXT label = {};
 			label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -7086,19 +6998,19 @@ using namespace Vulkan_Internal;
 			label.color[1] = 0;
 			label.color[2] = 0;
 			label.color[3] = 1;
-			cmdBeginDebugUtilsLabelEXT(GetDirectCommandList(cmd), &label);
+			vkCmdBeginDebugUtilsLabelEXT(GetDirectCommandList(cmd), &label);
 		}
 	}
 	void GraphicsDevice_Vulkan::EventEnd(CommandList cmd)
 	{
-		if (cmdEndDebugUtilsLabelEXT != nullptr)
+		if (vkCmdEndDebugUtilsLabelEXT != nullptr)
 		{
-			cmdEndDebugUtilsLabelEXT(GetDirectCommandList(cmd));
+			vkCmdEndDebugUtilsLabelEXT(GetDirectCommandList(cmd));
 		}
 	}
 	void GraphicsDevice_Vulkan::SetMarker(const char* name, CommandList cmd)
 	{
-		if (cmdInsertDebugUtilsLabelEXT != nullptr)
+		if (vkCmdInsertDebugUtilsLabelEXT != nullptr)
 		{
 			VkDebugUtilsLabelEXT label = {};
 			label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -7107,7 +7019,7 @@ using namespace Vulkan_Internal;
 			label.color[1] = 0;
 			label.color[2] = 0;
 			label.color[3] = 1;
-			cmdInsertDebugUtilsLabelEXT(GetDirectCommandList(cmd), &label);
+			vkCmdInsertDebugUtilsLabelEXT(GetDirectCommandList(cmd), &label);
 		}
 	}
 
