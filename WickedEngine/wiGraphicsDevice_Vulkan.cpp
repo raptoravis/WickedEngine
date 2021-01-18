@@ -2384,8 +2384,9 @@ using namespace Vulkan_Internal;
 				}
 			}
 
-			if (checkExtensionSupport(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, available_deviceExtensions))
+			if (!DEBUGDEVICE && checkExtensionSupport(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, available_deviceExtensions))
 			{
+				// Note: VRS will crash vulkan validation layers: https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2473
 				VARIABLE_RATE_SHADING_TILE_SIZE = std::min(fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.width, fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.height);
 				enabled_deviceExtensions.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
 				fragment_shading_rate_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
@@ -2430,13 +2431,11 @@ using namespace Vulkan_Internal;
 			{
 				assert(acceleration_structure_features.accelerationStructure == VK_TRUE);
 				assert(features_1_2.bufferDeviceAddress == VK_TRUE);
-				// Shader compiler has bug with vk inline raytracing now:
-				//capabilities |= GRAPHICSDEVICE_CAPABILITY_RAYTRACING_INLINE;
+				capabilities |= GRAPHICSDEVICE_CAPABILITY_RAYTRACING_INLINE;
 			}
 			if (mesh_shader_features.meshShader == VK_TRUE && mesh_shader_features.taskShader == VK_TRUE)
 			{
-				// Enable mesh shader here (problematic with certain driver versions, disabled by default): 
-				//capabilities |= GRAPHICSDEVICE_CAPABILITY_MESH_SHADER;
+				capabilities |= GRAPHICSDEVICE_CAPABILITY_MESH_SHADER;
 			}
 
 			assert(features_1_2.hostQueryReset == VK_TRUE);
@@ -2675,7 +2674,7 @@ using namespace Vulkan_Internal;
 
 					VkCommandBufferBeginInfo beginInfo = {};
 					beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 					beginInfo.pInheritanceInfo = nullptr; // Optional
 
 					res = vkBeginCommandBuffer(frame.copyCommandBuffer, &beginInfo);
@@ -3197,7 +3196,7 @@ using namespace Vulkan_Internal;
 
 					VkCommandBufferBeginInfo beginInfo = {};
 					beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 					beginInfo.pInheritanceInfo = nullptr; // Optional
 
 					res = vkBeginCommandBuffer(frame.copyCommandBuffer, &beginInfo);
@@ -3483,7 +3482,7 @@ using namespace Vulkan_Internal;
 
 					VkCommandBufferBeginInfo beginInfo = {};
 					beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 					beginInfo.pInheritanceInfo = nullptr; // Optional
 
 					res = vkBeginCommandBuffer(frame.copyCommandBuffer, &beginInfo);
@@ -5931,7 +5930,7 @@ using namespace Vulkan_Internal;
 
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 			beginInfo.pInheritanceInfo = nullptr; // Optional
 
 			res = vkBeginCommandBuffer(frame.transitionCommandBuffer, &beginInfo);

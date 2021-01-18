@@ -1229,6 +1229,7 @@ void LoadShaders()
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_UNORM1], "upsample_bilateral_unorm1CS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_FLOAT4], "upsample_bilateral_float4CS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_UNORM4], "upsample_bilateral_unorm4CS.cso"); });
+	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_UINT4], "upsample_bilateral_uint4CS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_DOWNSAMPLE4X], "downsample4xCS.cso"); });
 	wiJobSystem::Execute(ctx, [](wiJobArgs args) { LoadShader(CS, shaders[CSTYPE_POSTPROCESS_NORMALSFROMDEPTH], "normalsfromdepthCS.cso"); });
 
@@ -9523,6 +9524,8 @@ void Postprocess_RTAO(
 	device->EventBegin("Postprocess_RTAO", cmd);
 	auto prof_range = wiProfiler::BeginRangeGPU("RTAO", cmd);
 
+	BindCommonResources(cmd);
+
 	static RaytracingPipelineState RTPSO;
 	static DescriptorTable descriptorTable;
 	static RootSignature rootSignature;
@@ -9705,6 +9708,9 @@ void Postprocess_RTAO(
 	device->Barrier(barriers, arraysize(barriers), cmd);
 
 	device->EventEnd(cmd);
+
+	device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
+	device->BindConstantBuffer(CS, &constantBuffers[CBTYPE_POSTPROCESS], CB_GETBINDSLOT(PostProcessCB), cmd);
 
 	int temporal_output = device->GetFrameCount() % 2;
 	int temporal_history = 1 - temporal_output;
@@ -10120,6 +10126,8 @@ void Postprocess_SSR(
 
 	device->UnbindResources(TEXSLOT_RENDERPATH_SSR, 1, cmd);
 
+	BindCommonResources(cmd);
+
 	const TextureDesc& input_desc = input.GetDesc();
 	const TextureDesc& desc = output.GetDesc();
 
@@ -10300,6 +10308,256 @@ void Postprocess_SSR(
 	}
 
 	wiProfiler::EndRange(range);
+	device->EventEnd(cmd);
+}
+void Postprocess_RTShadow(
+	const Scene& scene,
+	const Texture& depthbuffer,
+	const Texture& lineardepth,
+	const Texture& depth_history,
+	const wiGraphics::GPUBuffer& entityTiles_Opaque,
+	const Texture& output,
+	CommandList cmd
+)
+{
+	if (!wiRenderer::device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_RAYTRACING))
+		return;
+	if (!wiRenderer::device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_DESCRIPTOR_MANAGEMENT))
+		return;
+
+	if (scene.objects.GetCount() <= 0)
+	{
+		return;
+	}
+
+	device->EventBegin("Postprocess_RTShadow", cmd);
+	auto prof_range = wiProfiler::BeginRangeGPU("RTShadow", cmd);
+
+	BindCommonResources(cmd);
+
+	static RaytracingPipelineState RTPSO;
+	static DescriptorTable descriptorTable;
+	static RootSignature rootSignature;
+
+	auto load_shaders = [&scene](uint64_t userdata) {
+
+		descriptorTable = DescriptorTable();
+		descriptorTable.resources.push_back({ TEXTURE2D, TEXSLOT_DEPTH });
+		descriptorTable.resources.push_back({ TEXTURE2D, TEXSLOT_ONDEMAND0 });
+		descriptorTable.resources.push_back({ ACCELERATIONSTRUCTURE, TEXSLOT_ACCELERATION_STRUCTURE });
+		descriptorTable.resources.push_back({ STRUCTUREDBUFFER, SBSLOT_ENTITYARRAY });
+		descriptorTable.resources.push_back({ STRUCTUREDBUFFER, TEXSLOT_RENDERPATH_ENTITYTILES });
+		descriptorTable.resources.push_back({ RWTEXTURE2D, 0 });
+		descriptorTable.resources.push_back({ ROOT_CONSTANTBUFFER, CB_GETBINDSLOT(FrameCB) });
+		descriptorTable.resources.push_back({ ROOT_CONSTANTBUFFER, CB_GETBINDSLOT(CameraCB) });
+		descriptorTable.resources.push_back({ ROOT_CONSTANTBUFFER, CB_GETBINDSLOT(PostProcessCB) });
+		descriptorTable.staticsamplers.push_back({ samplers[SSLOT_POINT_CLAMP], SSLOT_POINT_CLAMP });
+		descriptorTable.staticsamplers.push_back({ samplers[SSLOT_LINEAR_CLAMP], SSLOT_LINEAR_CLAMP });
+		descriptorTable.staticsamplers.push_back({ samplers[SSLOT_POINT_WRAP], SSLOT_POINT_WRAP });
+		descriptorTable.staticsamplers.push_back({ samplers[SSLOT_LINEAR_WRAP], SSLOT_LINEAR_WRAP });
+		device->CreateDescriptorTable(&descriptorTable);
+
+		rootSignature = RootSignature();
+		rootSignature.tables.push_back(descriptorTable);
+		rootSignature.tables.push_back(scene.descriptorTables[Scene::DESCRIPTORTABLE_SUBSETS_MATERIAL]);
+		rootSignature.tables.push_back(scene.descriptorTables[Scene::DESCRIPTORTABLE_SUBSETS_TEXTURES]);
+		rootSignature.tables.push_back(scene.descriptorTables[Scene::DESCRIPTORTABLE_SUBSETS_INDEXBUFFER]);
+		rootSignature.tables.push_back(scene.descriptorTables[Scene::DESCRIPTORTABLE_SUBSETS_VERTEXBUFFER_UVSETS]);
+		device->CreateRootSignature(&rootSignature);
+
+		shaders[RTTYPE_RTSHADOW].rootSignature = &rootSignature;
+		bool success = LoadShader(SHADERSTAGE_COUNT, shaders[RTTYPE_RTSHADOW], "rtshadowLIB.cso");
+		assert(success);
+
+		RaytracingPipelineStateDesc rtdesc;
+		rtdesc.rootSignature = &rootSignature;
+
+		rtdesc.shaderlibraries.emplace_back();
+		rtdesc.shaderlibraries.back().shader = &shaders[RTTYPE_RTSHADOW];
+		rtdesc.shaderlibraries.back().function_name = "RTShadow_Raygen";
+		rtdesc.shaderlibraries.back().type = ShaderLibrary::RAYGENERATION;
+
+		rtdesc.shaderlibraries.emplace_back();
+		rtdesc.shaderlibraries.back().shader = &shaders[RTTYPE_RTSHADOW];
+		rtdesc.shaderlibraries.back().function_name = "RTShadow_ClosestHit";
+		rtdesc.shaderlibraries.back().type = ShaderLibrary::CLOSESTHIT;
+
+		rtdesc.shaderlibraries.emplace_back();
+		rtdesc.shaderlibraries.back().shader = &shaders[RTTYPE_RTSHADOW];
+		rtdesc.shaderlibraries.back().function_name = "RTShadow_AnyHit";
+		rtdesc.shaderlibraries.back().type = ShaderLibrary::ANYHIT;
+
+		rtdesc.shaderlibraries.emplace_back();
+		rtdesc.shaderlibraries.back().shader = &shaders[RTTYPE_RTSHADOW];
+		rtdesc.shaderlibraries.back().function_name = "RTShadow_Miss";
+		rtdesc.shaderlibraries.back().type = ShaderLibrary::MISS;
+
+		rtdesc.hitgroups.emplace_back();
+		rtdesc.hitgroups.back().type = ShaderHitGroup::GENERAL;
+		rtdesc.hitgroups.back().name = "RTShadow_Raygen";
+		rtdesc.hitgroups.back().general_shader = 0;
+
+		rtdesc.hitgroups.emplace_back();
+		rtdesc.hitgroups.back().type = ShaderHitGroup::GENERAL;
+		rtdesc.hitgroups.back().name = "RTShadow_Miss";
+		rtdesc.hitgroups.back().general_shader = 3;
+
+		rtdesc.hitgroups.emplace_back();
+		rtdesc.hitgroups.back().type = ShaderHitGroup::TRIANGLES;
+		rtdesc.hitgroups.back().name = "RTShadow_Hitgroup";
+		rtdesc.hitgroups.back().closesthit_shader = 1;
+		rtdesc.hitgroups.back().anyhit_shader = 2;
+
+		rtdesc.max_trace_recursion_depth = 1;
+		rtdesc.max_payload_size_in_bytes = sizeof(float);
+		rtdesc.max_attribute_size_in_bytes = sizeof(XMFLOAT2); // bary
+		success = device->CreateRaytracingPipelineState(&rtdesc, &RTPSO);
+		assert(success);
+
+		success = LoadShader(CS, shaders[CSTYPE_POSTPROCESS_RTSHADOW_DENOISE_TEMPORAL], "rtshadow_denoise_temporalCS.cso");
+		assert(success);
+	};
+
+	static wiEvent::Handle handle = wiEvent::Subscribe(SYSTEM_EVENT_RELOAD_SHADERS, load_shaders);
+	if (!RTPSO.IsValid())
+	{
+		load_shaders(0);
+	}
+
+	static TextureDesc saved_desc;
+	static Texture temp;
+	static Texture temporal[2];
+	static Texture normals;
+
+	const TextureDesc& lineardepth_desc = lineardepth.GetDesc();
+	if (saved_desc.Width != lineardepth_desc.Width || saved_desc.Height != lineardepth_desc.Height)
+	{
+		saved_desc = lineardepth_desc; // <- this must already have SRV and UAV request flags set up!
+		saved_desc.MipLevels = 1;
+
+		TextureDesc desc = saved_desc;
+		desc.Width = (desc.Width + 1) / 2;
+		desc.Height = (desc.Height + 1) / 2;
+		desc.Format = FORMAT_R32G32B32A32_UINT;
+		device->CreateTexture(&desc, nullptr, &temp);
+		device->SetName(&temp, "rtshadow_temp");
+
+		device->CreateTexture(&desc, nullptr, &temporal[0]);
+		device->SetName(&temporal[0], "rtshadow_temporal[0]");
+		device->CreateTexture(&desc, nullptr, &temporal[1]);
+		device->SetName(&temporal[1], "rtshadow_temporal[1]");
+
+		desc.Format = FORMAT_R11G11B10_FLOAT;
+		device->CreateTexture(&desc, nullptr, &normals);
+		device->SetName(&normals, "rtshadow_normals");
+	}
+
+	Postprocess_NormalsFromDepth(depthbuffer, normals, cmd);
+
+	device->EventBegin("Raytrace", cmd);
+
+	const TextureDesc& desc = temp.GetDesc();
+
+	PostProcessCB cb;
+	cb.xPPResolution.x = desc.Width;
+	cb.xPPResolution.y = desc.Height;
+	cb.xPPResolution_rcp.x = 1.0f / cb.xPPResolution.x;
+	cb.xPPResolution_rcp.y = 1.0f / cb.xPPResolution.y;
+	GraphicsDevice::GPUAllocation cb_alloc = device->AllocateGPU(sizeof(cb), cmd);
+	memcpy(cb_alloc.data, &cb, sizeof(cb));
+
+	device->BindRaytracingPipelineState(&RTPSO, cmd);
+	device->WriteDescriptor(&descriptorTable, 0, 0, &depthbuffer);
+	device->WriteDescriptor(&descriptorTable, 1, 0, &normals);
+	device->WriteDescriptor(&descriptorTable, 2, 0, &scene.TLAS);
+	device->WriteDescriptor(&descriptorTable, 2, 0, &scene.TLAS);
+	device->WriteDescriptor(&descriptorTable, 3, 0, &resourceBuffers[RBTYPE_ENTITYARRAY]);
+	device->WriteDescriptor(&descriptorTable, 4, 0, &entityTiles_Opaque);
+	device->WriteDescriptor(&descriptorTable, 5, 0, &temp);
+	for (size_t i = 0; i < rootSignature.tables.size(); ++i)
+	{
+		device->BindDescriptorTable(RAYTRACING, (uint32_t)i, &rootSignature.tables[i], cmd);
+	}
+	device->BindRootDescriptor(RAYTRACING, 0, &constantBuffers[CBTYPE_FRAME], 0, cmd);
+	device->BindRootDescriptor(RAYTRACING, 1, &constantBuffers[CBTYPE_CAMERA], 0, cmd);
+	device->BindRootDescriptor(RAYTRACING, 2, cb_alloc.buffer, cb_alloc.offset, cmd);
+
+	size_t shaderIdentifierSize = device->GetShaderIdentifierSize();
+	GraphicsDevice::GPUAllocation shadertable_raygen = device->AllocateGPU(shaderIdentifierSize, cmd);
+	GraphicsDevice::GPUAllocation shadertable_miss = device->AllocateGPU(shaderIdentifierSize, cmd);
+	GraphicsDevice::GPUAllocation shadertable_hitgroup = device->AllocateGPU(shaderIdentifierSize, cmd);
+
+	device->WriteShaderIdentifier(&RTPSO, 0, shadertable_raygen.data);
+	device->WriteShaderIdentifier(&RTPSO, 1, shadertable_miss.data);
+	device->WriteShaderIdentifier(&RTPSO, 2, shadertable_hitgroup.data);
+
+	DispatchRaysDesc dispatchraysdesc;
+	dispatchraysdesc.raygeneration.buffer = shadertable_raygen.buffer;
+	dispatchraysdesc.raygeneration.offset = shadertable_raygen.offset;
+	dispatchraysdesc.raygeneration.size = shaderIdentifierSize;
+
+	dispatchraysdesc.miss.buffer = shadertable_miss.buffer;
+	dispatchraysdesc.miss.offset = shadertable_miss.offset;
+	dispatchraysdesc.miss.size = shaderIdentifierSize;
+	dispatchraysdesc.miss.stride = shaderIdentifierSize;
+
+	dispatchraysdesc.hitgroup.buffer = shadertable_hitgroup.buffer;
+	dispatchraysdesc.hitgroup.offset = shadertable_hitgroup.offset;
+	dispatchraysdesc.hitgroup.size = shaderIdentifierSize;
+	dispatchraysdesc.hitgroup.stride = shaderIdentifierSize;
+
+	dispatchraysdesc.Width = desc.Width;
+	dispatchraysdesc.Height = desc.Height;
+
+	device->DispatchRays(&dispatchraysdesc, cmd);
+
+	GPUBarrier barriers[] = {
+		GPUBarrier::Memory(),
+	};
+	device->Barrier(barriers, arraysize(barriers), cmd);
+
+	device->EventEnd(cmd);
+
+	device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
+	device->BindConstantBuffer(CS, &constantBuffers[CBTYPE_POSTPROCESS], CB_GETBINDSLOT(PostProcessCB), cmd);
+
+	int temporal_output = device->GetFrameCount() % 2;
+	int temporal_history = 1 - temporal_output;
+
+	// Temporal pass:
+	{
+		device->EventBegin("Temporal Denoise", cmd);
+		device->BindComputeShader(&shaders[CSTYPE_POSTPROCESS_RTSHADOW_DENOISE_TEMPORAL], cmd);
+
+		device->BindResource(CS, &depthbuffer, TEXSLOT_DEPTH, cmd);
+		device->BindResource(CS, &temp, TEXSLOT_ONDEMAND0, cmd);
+		device->BindResource(CS, &temporal[temporal_history], TEXSLOT_ONDEMAND1, cmd);
+		device->BindResource(CS, &depth_history, TEXSLOT_ONDEMAND2, cmd);
+
+		const GPUResource* uavs[] = {
+			&temporal[temporal_output],
+		};
+		device->BindUAVs(CS, uavs, 0, arraysize(uavs), cmd);
+
+		device->Dispatch(
+			(temporal[temporal_output].GetDesc().Width + POSTPROCESS_BLOCKSIZE - 1) / POSTPROCESS_BLOCKSIZE,
+			(temporal[temporal_output].GetDesc().Height + POSTPROCESS_BLOCKSIZE - 1) / POSTPROCESS_BLOCKSIZE,
+			1,
+			cmd
+		);
+
+		GPUBarrier barriers[] = {
+			GPUBarrier::Memory(),
+		};
+		device->Barrier(barriers, arraysize(barriers), cmd);
+
+		device->UnbindUAVs(0, arraysize(uavs), cmd);
+		device->EventEnd(cmd);
+	}
+
+	Postprocess_Upsample_Bilateral(temporal[temporal_output], lineardepth, output, cmd);
+
+	wiProfiler::EndRange(prof_range);
 	device->EventEnd(cmd);
 }
 void Postprocess_LightShafts(
@@ -11730,6 +11988,10 @@ void Postprocess_Upsample_Bilateral(
 	cb.xPPParams0.z = 1.0f / (float)input.GetDesc().Height;
 	// select mip from lowres depth mipchain:
 	cb.xPPParams0.w = floorf(std::max(1.0f, log2f(std::max((float)desc.Width / (float)input.GetDesc().Width, (float)desc.Height / (float)input.GetDesc().Height))));
+	cb.xPPParams1.x = (float)input.GetDesc().Width;
+	cb.xPPParams1.y = (float)input.GetDesc().Height;
+	cb.xPPParams1.z = 1.0f / cb.xPPParams1.x;
+	cb.xPPParams1.w = 1.0f / cb.xPPParams1.y;
 	device->UpdateBuffer(&constantBuffers[CBTYPE_POSTPROCESS], &cb, cmd);
 
 	if (pixelshader)
@@ -11766,6 +12028,9 @@ void Postprocess_Upsample_Bilateral(
 		case FORMAT_R16G16B16A16_FLOAT:
 		case FORMAT_R32G32B32A32_FLOAT:
 			cs = CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_FLOAT4;
+			break;
+		case FORMAT_R32G32B32A32_UINT:
+			cs = CSTYPE_POSTPROCESS_UPSAMPLE_BILATERAL_UINT4;
 			break;
 		default:
 			assert(0); // implement format!

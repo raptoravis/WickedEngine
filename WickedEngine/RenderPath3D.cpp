@@ -142,6 +142,23 @@ void RenderPath3D::ResizeBuffers()
 	}
 	{
 		TextureDesc desc;
+		desc.BindFlags = BIND_SHADER_RESOURCE | BIND_UNORDERED_ACCESS;
+		desc.Format = FORMAT_R32G32B32A32_UINT;
+		if (device->CheckCapability(GRAPHICSDEVICE_CAPABILITY_RAYTRACING))
+		{
+			desc.Width = internalResolution.x;
+			desc.Height = internalResolution.y;
+		}
+		else
+		{
+			desc.Width = 1;
+			desc.Height = 1;
+		}
+		device->CreateTexture(&desc, nullptr, &rtShadow);
+		device->SetName(&rtShadow, "rtShadow");
+	}
+	{
+		TextureDesc desc;
 		desc.BindFlags = BIND_RENDER_TARGET | BIND_SHADER_RESOURCE;
 		desc.Format = defaultTextureFormat;
 		desc.Width = internalResolution.x;
@@ -849,6 +866,19 @@ void RenderPath3D::Render() const
 			wiProfiler::EndRange(range);
 		}
 
+		if (wiRenderer::GetRaytracedShadowsEnabled())
+		{
+			wiRenderer::Postprocess_RTShadow(
+				*scene,
+				depthBuffer_Copy,
+				rtLinearDepth,
+				depthBuffer_Copy1,
+				entityTiles_Opaque,
+				rtShadow,
+				cmd
+			);
+		}
+
 		device->RenderPassBegin(&renderpass_main, cmd);
 
 		auto range = wiProfiler::BeginRangeGPU("Opaque Scene", cmd);
@@ -862,6 +892,7 @@ void RenderPath3D::Render() const
 		device->BindResource(PS, getReflectionsEnabled() ? &rtReflection : wiTextureHelper::getTransparent(), TEXSLOT_RENDERPATH_REFLECTION, cmd);
 		device->BindResource(PS, getAOEnabled() ? &rtAO : wiTextureHelper::getWhite(), TEXSLOT_RENDERPATH_AO, cmd);
 		device->BindResource(PS, getSSREnabled() || getRaytracedReflectionEnabled() ? &rtSSR : wiTextureHelper::getTransparent(), TEXSLOT_RENDERPATH_SSR, cmd);
+		device->BindResource(PS, &rtShadow, TEXSLOT_RENDERPATH_RTSHADOW, cmd);
 		wiRenderer::DrawScene(visibility_main, RENDERPASS_MAIN, cmd, drawscene_flags);
 		wiRenderer::DrawSky(*scene, cmd);
 
